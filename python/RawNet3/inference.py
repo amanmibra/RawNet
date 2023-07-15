@@ -33,10 +33,13 @@ def main(args: Dict) -> None:
 
     model.load_state_dict(
         torch.load(
-            "./models/weights/model.pt",
+            "./model.pt",
             map_location=lambda storage, loc: storage,
         )["model"]
     )
+    # model.load_state_dict(
+    #     torch.load("./models/weights/model.pt")
+    # )
     model.eval()
     print("RawNet3 initialised & weights loaded!")
 
@@ -49,10 +52,23 @@ def main(args: Dict) -> None:
         output = extract_speaker_embd(
             model,
             fn=args.input,
+            n_samples=48000, # 16000 * 3 seconds
+            n_segments=args.n_segments,
+            gpu=gpu,
+        ).mean(0)
+
+        output2 = extract_speaker_embd(
+            model,
+            fn=args.input2,
             n_samples=48000,
             n_segments=args.n_segments,
             gpu=gpu,
         ).mean(0)
+
+        cos = torch.nn.CosineSimilarity(dim=0)
+
+        sim = cos(output, output2)
+        print(f"sim: {sim}")
 
         np.save(args.out_dir, output.detach().cpu().numpy())
         return
@@ -112,7 +128,9 @@ def main(args: Dict) -> None:
 def extract_speaker_embd(
     model, fn: str, n_samples: int, n_segments: int = 10, gpu: bool = False
 ) -> np.ndarray:
-    audio, sample_rate = sf.read(fn)
+    # audio, sample_rate = sf.read(fn, samplerate=16000)
+    import librosa
+    audio, sample_rate = librosa.load(fn, sr=16000)
     if len(audio.shape) > 1:
         raise ValueError(
             f"RawNet3 supports mono input only. Input data has a shape of {audio.shape}."
@@ -151,6 +169,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--input",
+        type=str,
+        default="",
+        help="Input file to extract embedding. Required when 'inference_utterance' is True",
+    )
+    parser.add_argument(
+        "--input2",
         type=str,
         default="",
         help="Input file to extract embedding. Required when 'inference_utterance' is True",
